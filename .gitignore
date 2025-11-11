@@ -4,6 +4,12 @@
 # Log file
 *.log
 
+# IntelliJ IDEA project settings
+.idea/
+
+# Maven / Build Output
+target/
+
 # BlueJ files
 *.ctxt
 
