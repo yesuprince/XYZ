@@ -15,7 +15,7 @@ import java.util.UUID;
 public class JwtTokenGenerator {
     public static void main(String[] args) {
         String base64Secret = "t3dxNrdVbFXBH1+ispTZur2aoyL/bVN1rx0pCfVFP44=";
-        
+
         byte[] keyBytes = Decoders.BASE64.decode(base64Secret);
         Key key = Keys.hmacShaKeyFor(keyBytes);
 
