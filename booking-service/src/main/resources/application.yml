@@ -20,6 +20,12 @@ spring:
       mode: always
       schema-locations: classpath:db/schema.sql
       data-locations: classpath:db/data.sql
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          secret-key: t3dxNrdVbFXBH1+ispTZur2aoyL/bVN1rx0pCfVFP44=
+          algorithm: HS256
 
 booking:
   validation:
@@ -54,3 +60,8 @@ resilience4j:
         failure-rate-threshold: 50
         slow-call-rate-threshold: 50
         slow-call-duration-threshold: 2s
+
+logging:
+  level:
+    root: INFO
+    org.springframework.security: DEBUG

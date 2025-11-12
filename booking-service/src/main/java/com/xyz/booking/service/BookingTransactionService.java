@@ -3,6 +3,7 @@ package com.xyz.booking.service;
 import com.xyz.booking.dto.BookingConfirmResponse;
 import com.xyz.booking.entity.Booking;
 import com.xyz.booking.entity.CarInventory;
+import com.xyz.booking.enums.CarSegment;
 import com.xyz.booking.repository.BookingRepository;
 import com.xyz.booking.repository.CarInventoryRepository;
 import jakarta.transaction.Transactional;
@@ -21,7 +22,7 @@ public class BookingTransactionService {
 
     @Transactional
     public BookingConfirmResponse saveBooking(Booking booking) {
-        String segment = booking.getCarSegment().name();
+        CarSegment segment = booking.getCarSegment();
         LocalDate startDate = booking.getStartDate();
         LocalDate endDate = booking.getEndDate();
         // Lock inventory row for this segment

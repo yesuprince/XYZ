@@ -1,5 +1,6 @@
 package com.xyz.booking.entity;
 
+import com.xyz.booking.enums.CarSegment;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -16,7 +17,8 @@ public class CarInventory {
     private Long id;
 
     @Column(unique = true, nullable = false)
-    private String carSegment;
+    @Enumerated(EnumType.STRING)
+    private CarSegment carSegment;
 
     @Column(nullable = false)
     private int totalCars;

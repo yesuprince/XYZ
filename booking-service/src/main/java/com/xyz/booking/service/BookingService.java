@@ -56,7 +56,7 @@ public class BookingService {
         Booking booking = new Booking();
         booking.setCustomerName(license.ownerName());
         booking.setAge(bookingRequest.customerAge());
-        booking.setLicenseNumber(booking.getLicenseNumber());
+        booking.setLicenseNumber(bookingRequest.drivingLicenseNumber());
         booking.setCarSegment(bookingRequest.carSegment());
         booking.setStartDate(bookingRequest.reservationStartDate());
         booking.setEndDate(bookingRequest.reservationEndDate());
