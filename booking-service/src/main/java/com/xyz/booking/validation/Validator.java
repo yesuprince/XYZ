@@ -3,7 +3,8 @@ package com.xyz.booking.validation;
 import com.xyz.booking.clients.LicenseClient;
 import com.xyz.booking.clients.PricingClient;
 import com.xyz.booking.dto.*;
-import com.xyz.booking.exception.ExternalApiException;
+import com.xyz.booking.exception.ExternalApiRequestException;
+import com.xyz.booking.exception.ExternalApiUnavailableException;
 import com.xyz.booking.exception.InvalidBookingException;
 import com.xyz.booking.properties.ValidationProperties;
 import feign.FeignException;
@@ -53,7 +54,7 @@ public class Validator {
             try {
                 LicenseResponse licenseResponse = licenseClient.getLicenseDetails(new LicenseRequest(bookingRequest.drivingLicenseNumber()));
                 if (licenseResponse == null) {
-                    throw new ExternalApiException("License API returned empty response");
+                    throw new ExternalApiRequestException("License API returned empty response");
                 }
                 if (licenseResponse.expiryDate().isBefore(LocalDate.now())) {
                     throw new InvalidBookingException("Driving License is expired");
@@ -66,12 +67,15 @@ public class Validator {
             } catch (FeignException fe) {
                 throw fe;
             } catch (Exception e) {
-                throw new ExternalApiException("License API failed: " + e.getMessage(), e);
+                throw new ExternalApiRequestException("License API failed: " + e.getMessage(), e);
             }
         });
         Supplier<CompletionStage<LicenseResponse>> licenseCompletion = Decorators.ofCompletionStage(licenseSupplier::get)
                 .withCircuitBreaker(circuitBreaker)
                 .withRetry(retry, retryScheduler)
+                .withFallback(throwable -> {
+                    throw new ExternalApiUnavailableException("License Service temporarily unavailable");
+                })
                 .decorate();
         return licenseCompletion.get()
                 .toCompletableFuture()
@@ -83,18 +87,21 @@ public class Validator {
             try {
                 RateResponse rateResponse = pricingClient.getRate(new RateRequest(bookingRequest.carSegment().name()));
                 if (rateResponse == null) {
-                    throw new ExternalApiException("Pricing API returned empty response");
+                    throw new ExternalApiRequestException("Pricing API returned empty response");
                 }
                 return rateResponse;
             } catch (FeignException fe) {
                 throw fe;
             } catch (Exception e) {
-                throw new ExternalApiException("Pricing API failed: " + e.getMessage(), e);
+                throw new ExternalApiRequestException("Pricing API failed: " + e.getMessage(), e);
             }
         });
         Supplier<CompletionStage<RateResponse>> rateCompletion = Decorators.ofCompletionStage(rateSupplier::get)
                 .withCircuitBreaker(circuitBreaker)
                 .withRetry(retry, retryScheduler)
+                .withFallback(throwable -> {
+                    throw new ExternalApiUnavailableException("Pricing Service temporarily unavailable");
+                })
                 .decorate();
         return rateCompletion.get()
                 .toCompletableFuture()

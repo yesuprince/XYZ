@@ -21,9 +21,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(new ErrorResponse("VALIDATION_FAILED", ex.getMessage()));
     }
 
-    @ExceptionHandler(ExternalApiException.class)
-    public ResponseEntity<ErrorResponse> handleExternalApi(ExternalApiException ex) {
+    @ExceptionHandler(ExternalApiRequestException.class)
+    public ResponseEntity<ErrorResponse> handleExternalApi(ExternalApiRequestException ex) {
         return ResponseEntity.badRequest().body(new ErrorResponse("EXTERNAL_API_ERROR", ex.getMessage()));
+    }
+    
+    @ExceptionHandler(ExternalApiUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleServiceUnavailable(ExternalApiUnavailableException ex) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(new ErrorResponse("SERVICE_UNAVAILABLE", ex.getMessage()));
     }
 
     @ExceptionHandler(BookingNotFoundException.class)
