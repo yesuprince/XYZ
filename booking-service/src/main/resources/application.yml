@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:car_rental_db
+    url: jdbc:h2:mem:car_rental_db;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
     driver-class-name: org.h2.Driver
     username: Test@1234
     password: Test@1234
@@ -10,10 +10,47 @@ spring:
       path: /h2-console
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none
     show-sql: true
     properties:
       hibernate:
         format_sql: true
-server:
-  port: 8080
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/schema.sql
+      data-locations: classpath:db/data.sql
+
+booking:
+  validation:
+    max-days: 30
+    min-license-age-years: 1
+
+external:
+  apis:
+    license-service-url: http://localhost:9090/host/driving-license-api
+    pricing-service-url: http://localhost:9090/host/car-rental-pricing-api
+    timeout: 2
+
+resilience4j:
+  retry:
+    instances:
+      externalApiRetry:
+        max-attempts: 3
+        wait-duration: 300ms
+  timelimiter:
+    instances:
+      externalApiTimeLimiter:
+        timeout-duration: 2s
+  circuitbreaker:
+    instances:
+      externalApiCircuit:
+        register-health-indicator: true
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        permitted-number-of-calls-in-half-open-state: 3
+        wait-duration-in-open-state: 10s
+        failure-rate-threshold: 50
+        slow-call-rate-threshold: 50
+        slow-call-duration-threshold: 2s

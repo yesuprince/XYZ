@@ -1,0 +1,12 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: mock-car-rental-service
+
+external:
+  apis:
+    license-service-url: http://mockhost/host/driving-license-api
+    pricing-service-url: http://mockhost/host/car-rental-pricing-api
+    timeout: 2

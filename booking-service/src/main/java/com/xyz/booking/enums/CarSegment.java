@@ -1,5 +1,5 @@
 package com.xyz.booking.enums;
 
-public enum CarType {
+public enum CarSegment {
     SMALL, MEDIUM, LARGE, EXTRA_LARGE
 }

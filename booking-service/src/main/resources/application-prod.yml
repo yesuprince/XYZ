@@ -1,0 +1,21 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: xyz-car-rental-service
+external:
+  apis:
+    license-service-url: http://localhost:9090/host/driving-license-api
+    pricing-service-url: http://localhost:9090/host/car-rental-pricing-api
+    timeout: 2
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      probes:
+        enabled: true
