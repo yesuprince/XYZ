@@ -38,89 +38,131 @@ public class Validator {
     private long externalApiTimeout;
 
     public CompletableFuture<Void> validateReservationDuration(BookingRequest bookingRequest) {
-        log.debug("Validating reservation duration for license={}", bookingRequest.drivingLicenseNumber());
         return CompletableFuture.runAsync(() -> {
-            long reservationDays = ChronoUnit.DAYS.between(bookingRequest.reservationStartDate(), bookingRequest.reservationEndDate());
-            if (reservationDays <= 0) {
-                log.warn("Invalid reservation duration: end date before start date");
+            long days = ChronoUnit.DAYS.between(
+                    bookingRequest.reservationStartDate(),
+                    bookingRequest.reservationEndDate()
+            );
+
+            if (days <= 0) {
                 throw new InvalidBookingException("Reservation end date must be after start date.");
             }
-            if (reservationDays > properties.getMaxDays()) {
-                log.warn("Reservation exceeds max allowed days={}", properties.getMaxDays());
+            if (days > properties.getMaxDays()) {
                 throw new InvalidBookingException("Reservation exceeds " + properties.getMaxDays() + " days.");
             }
         });
     }
 
-    public CompletableFuture<LicenseResponse> validateLicense(BookingRequest bookingRequest) {
-        log.info("Validating license [{}]", bookingRequest.drivingLicenseNumber());
-        Supplier<CompletableFuture<LicenseResponse>> licenseSupplier = () -> CompletableFuture.supplyAsync(() -> {
-            try {
-                LicenseResponse licenseResponse = licenseClient.getLicenseDetails(new LicenseRequest(bookingRequest.drivingLicenseNumber()));
-                if (licenseResponse == null) {
-                    log.error("License API returned empty response");
-                    throw new ExternalApiRequestException("License API returned empty response");
-                }
-                if (licenseResponse.expiryDate().isBefore(LocalDate.now())) {
-                    log.warn("License [{}] is expired", bookingRequest.drivingLicenseNumber());
-                    throw new InvalidBookingException("Driving License is expired");
-                }
-                long licenseAge = ChronoUnit.YEARS.between(licenseResponse.issueDate(), LocalDate.now());
-                if (licenseAge < 1) {
-                    log.warn("License [{}] issued less than a year ago", bookingRequest.drivingLicenseNumber());
-                    throw new InvalidBookingException("Driving License is issued less than a year");
-                }
-                log.info("License [{}] validated successfully", bookingRequest.drivingLicenseNumber());
-                return licenseResponse;
-            } catch (FeignException fe) {
-                throw fe;
-            } catch (Exception e) {
-                log.error("License API failure for [{}]: {}", bookingRequest.drivingLicenseNumber(), e.getMessage());
-                throw new ExternalApiRequestException("License API failed: " + e.getMessage(), e);
-            }
+
+    public CompletableFuture<LicenseResponse> validateLicense(BookingRequest request) {
+        String licenseNo = request.drivingLicenseNumber();
+        log.info("Validating license [{}]", licenseNo);
+
+        // API call
+        Supplier<CompletableFuture<LicenseResponse>> licenseApiCall =
+                () -> asyncApiCall(() -> licenseClient.getLicenseDetails(
+                        new LicenseRequest(licenseNo)
+                ));
+
+        // Apply Retry + CircuitBreaker
+        CompletableFuture<LicenseResponse> future = applyResilience(
+                licenseApiCall,
+                () -> "License Service temporarily unavailable",
+                () -> licenseNo,
+                LicenseResponse.class
+        );
+
+        // Business validation
+        return future.thenApply(licenseResponse -> {
+            validateLicenseBusinessRules(licenseResponse, licenseNo);
+            log.info("License [{}] validated successfully", licenseNo);
+            return licenseResponse;
         });
-        Supplier<CompletionStage<LicenseResponse>> licenseCompletion = Decorators.ofCompletionStage(licenseSupplier::get)
-                .withCircuitBreaker(circuitBreaker)
-                .withRetry(retry, retryScheduler)
-                .withFallback(throwable -> {
-                    log.error("License service unavailable for [{}]", bookingRequest.drivingLicenseNumber());
-                    throw new ExternalApiUnavailableException("License Service temporarily unavailable");
-                })
-                .decorate();
-        return licenseCompletion.get()
+    }
+
+    private void validateLicenseBusinessRules(LicenseResponse response, String licenseNo) {
+        if (response == null) {
+            throw new ExternalApiRequestException("License API returned empty response");
+        }
+
+        if (response.expiryDate().isBefore(LocalDate.now())) {
+            throw new InvalidBookingException("Driving License is expired");
+        }
+
+        long licenseAge = ChronoUnit.YEARS.between(response.issueDate(), LocalDate.now());
+        if (licenseAge < 1) {
+            throw new InvalidBookingException("Driving License is issued less than a year");
+        }
+    }
+
+
+    public CompletableFuture<RateResponse> calculateRentalPrice(BookingRequest request) {
+        log.info("Calculating rental price for segment [{}]", request.carSegment());
+
+        // Api Call
+        Supplier<CompletableFuture<RateResponse>> pricingApiCall =
+                () -> asyncApiCall(() -> pricingClient.getRate(
+                        new RateRequest(request.carSegment().name())
+                ));
+
+        // Apply Retry + CircuitBreaker
+        return applyResilience(
+                pricingApiCall,
+                () -> "Pricing Service temporarily unavailable",
+                () -> request.carSegment().name(),
+                RateResponse.class
+        );
+    }
+
+
+    private <T> CompletableFuture<T> applyResilience(
+            Supplier<CompletableFuture<T>> supplier,
+            Supplier<String> unavailableMessage,
+            Supplier<String> contextMessage,
+            Class<T> responseClass
+    ) {
+
+        Supplier<CompletionStage<T>> decorated =
+                Decorators.ofCompletionStage(supplier::get)
+                        .withCircuitBreaker(circuitBreaker)
+                        .withRetry(retry, retryScheduler)
+                        .withFallback(throwable -> handleFallback(throwable, unavailableMessage, contextMessage))
+                        .decorate();
+
+        return decorated.get()
                 .toCompletableFuture()
                 .orTimeout(externalApiTimeout, TimeUnit.SECONDS);
     }
 
-    public CompletableFuture<RateResponse> calculateRentalPrice(BookingRequest bookingRequest) {
-        log.info("Calculating rental price for segment [{}]", bookingRequest.carSegment());
 
-        Supplier<CompletableFuture<RateResponse>> rateSupplier = () -> CompletableFuture.supplyAsync(() -> {
+    private <T> CompletableFuture<T> asyncApiCall(Supplier<T> supplier) {
+        return CompletableFuture.supplyAsync(() -> {
             try {
-                RateResponse rateResponse = pricingClient.getRate(new RateRequest(bookingRequest.carSegment().name()));
-                if (rateResponse == null) {
-                    throw new ExternalApiRequestException("Pricing API returned empty response");
+                T response = supplier.get();
+                if (response == null) {
+                    throw new ExternalApiRequestException("External API returned empty response");
                 }
-                log.info("Pricing retrieved successfully for segment [{}]", bookingRequest.carSegment());
-                return rateResponse;
+                return response;
+
             } catch (FeignException fe) {
-                throw fe;
+                throw fe; // NEVER RETRY
             } catch (Exception e) {
-                log.error("Pricing API failure for segment [{}]: {}", bookingRequest.carSegment(), e.getMessage());
-                throw new ExternalApiRequestException("Pricing API failed: " + e.getMessage(), e);
+                throw new ExternalApiRequestException("API failed: " + e.getMessage(), e);
             }
         });
-        Supplier<CompletionStage<RateResponse>> rateCompletion = Decorators.ofCompletionStage(rateSupplier::get)
-                .withCircuitBreaker(circuitBreaker)
-                .withRetry(retry, retryScheduler)
-                .withFallback(throwable -> {
-                    log.error("Pricing service unavailable for segment [{}]", bookingRequest.carSegment());
-                    throw new ExternalApiUnavailableException("Pricing Service temporarily unavailable");
-                })
-                .decorate();
-        return rateCompletion.get()
-                .toCompletableFuture()
-                .orTimeout(externalApiTimeout, TimeUnit.SECONDS);
+    }
+
+
+    private <T> T handleFallback(Throwable throwable,
+                                 Supplier<String> unavailableMessage,
+                                 Supplier<String> context) {
+
+        if (throwable instanceof InvalidBookingException ibe) throw ibe;
+        if (throwable instanceof ExternalApiRequestException ex) throw ex;
+        if (throwable instanceof FeignException fe) throw fe;
+
+        log.error("Service unavailable for [{}]: {}", context.get(), throwable.getMessage());
+        throw new ExternalApiUnavailableException(unavailableMessage.get());
     }
 
 

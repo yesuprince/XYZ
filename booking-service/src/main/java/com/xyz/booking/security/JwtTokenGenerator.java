@@ -23,11 +23,11 @@ public class JwtTokenGenerator {
 
         String token = Jwts.builder()
                 .setId(UUID.randomUUID().toString())
-                .setSubject("Admin")
+                .setSubject("Customer")
                 .setIssuer("XYZ-car-rental")
                 .setIssuedAt(Date.from(now))
                 .setExpiration(Date.from(now.plusSeconds(3600)))
-                .claim("scope", "admin")
+                .claim("scope", "user")
                 .signWith(key, SignatureAlgorithm.HS256)
                 .compact();
 

@@ -39,20 +39,16 @@ public class SecurityConfig {
 
         String algorithmName = jwtAlgorithm.toUpperCase();
 
-        switch (algorithmName) {
-            case "HS384":
-                return NimbusJwtDecoder
-                        .withSecretKey(new SecretKeySpec(keyBytes, "HmacSHA384"))
-                        .build();
-            case "HS512":
-                return NimbusJwtDecoder
-                        .withSecretKey(new SecretKeySpec(keyBytes, "HmacSHA512"))
-                        .build();
-            case "HS256":
-            default:
-                return NimbusJwtDecoder
-                        .withSecretKey(new SecretKeySpec(keyBytes, "HmacSHA256"))
-                        .build();
-        }
+        return switch (algorithmName) {
+            case "HS384" -> NimbusJwtDecoder
+                    .withSecretKey(new SecretKeySpec(keyBytes, "HmacSHA384"))
+                    .build();
+            case "HS512" -> NimbusJwtDecoder
+                    .withSecretKey(new SecretKeySpec(keyBytes, "HmacSHA512"))
+                    .build();
+            default -> NimbusJwtDecoder
+                    .withSecretKey(new SecretKeySpec(keyBytes, "HmacSHA256"))
+                    .build();
+        };
     }
 }
