@@ -1,25 +1,24 @@
 # Booking Service – XYZ Car Rental Company
 
-The **Booking Service** is a Spring Boot microservice responsible for confirming car rental bookings and retrieving
-booking details.
-<br>It integrates with external systems (Driving License API, Pricing API), performs business validations, ensures
-transactional inventory checks, and exposes secure HTTPS REST endpoints.
+This document provides a simple and clear overview of the **Booking Service**.  
+The service enables customers to confirm car rental bookings and retrieve booking details.  
+It integrates with external systems for license validation and pricing, follows important business rules, and uses a
+straightforward and maintainable architecture.
 
 ---
 
 # 1. Features
 
-- Confirm Car Rental Booking
-- Retrieve Booking Details
-- Validate license via external API
-- Retrieve pricing via external API
-- Async processing using CompletableFuture
-- Resilience4j (CircuitBreaker, Retry, TimeLimiter, Fallbacks)
-- JWT-based security (OAuth2 Resource Server)
-- Jetty HTTPS
-- Spring Profiles: mock, prod
-- API Versioning
-- Kubernetes-ready
+- Confirm a car rental booking
+- Retrieve booking details
+- Validate driving license through an external API
+- Fetch pricing through an external API
+- Perform validations using asynchronous processing (CompletableFuture)
+- Apply basic resilience through Resilience4j
+- Use JWT-based authentication
+- Use HTTPS with Jetty on port **8443**
+- Support Spring profiles (`mock`, `prod`)
+- Run easily on Docker or Kubernetes
 
 ---
 
@@ -27,31 +26,63 @@ transactional inventory checks, and exposes secure HTTPS REST endpoints.
 
 - Java 23
 - Spring Boot 3.5.x
-- Spring MVC + Jetty Server
+- Spring MVC (Jetty)
 - Spring Data JPA
-- H2 database (local)
-- Spring Security + OAuth2 (JWT)
-- OpenFeign Clients
+- H2 (local development)
+- Spring Security (OAuth2 JWT)
+- OpenFeign for API calls
 - Resilience4j
 - CompletableFuture
 - Actuator
 - Docker
-- Kubernetes
+- Kubernetes (Deployment + NodePort Service)
 
 ---
 
 # 3. Assumptions
 
-1. Driving License API returns `issueDate`, though real spec does not.
-2. All dates must follow the format: `yyyy-MM-dd`.
-3. Car segment list is fixed (SMALL, MEDIUM, LARGE, EXTRA_LARGE).
-4. Timezone = server local; no conversion logic implemented.
-5. H2 is used for development; production DB can be plugged in.
-6. `mock` profile uses in-memory/stub Feign clients; `prod` uses real endpoints.
+To keep the implementation practical, the following assumptions are made:
+
+1. The **Driving License API returns `issueDate`**, although the provided spec may not include it.
+2. All date values are expected to follow the format: **yyyy-MM-dd**.
+3. Car segments are predefined as: SMALL, MEDIUM, LARGE, EXTRA_LARGE.
+4. The server timezone is used for all date calculations.
+5. H2 is used for development only; any relational database can replace it in production.
+6. The `mock` profile uses mock URLs; the `prod` profile uses actual external API URLs.
 
 ---
 
-# 4. Architecture Diagram
+# 4. API Versioning
+
+This service uses a simple and clear versioning approach based on URI paths.
+
+### Current Version
+
+All API endpoints are available under:
+
+```
+/api/v1
+```
+
+The version is defined in a constant:
+
+```java
+public static final String V1 = "/api/v1";
+```
+
+### Current Endpoints
+
+- **POST** `/api/v1/booking/confirm`
+- **GET** `/api/v1/booking/details/{bookingId}`
+
+### Future Versions
+
+If the API changes in the future, a new version such as `/api/v2` will be introduced without breaking existing
+consumers.
+
+---
+
+# 5. Architecture Overview
 
 ```
 [Client]
@@ -60,97 +91,93 @@ transactional inventory checks, and exposes secure HTTPS REST endpoints.
 [Booking Controller]
    |
    v
-[Booking Service] --------> [Validator]
-        |                         |
-        |                         +--> (Feign) Driving License API
-        |                         |
-        |                         +--> (Feign) Pricing API
+[Booking Service] ------> [Validator]
+        |                     |
+        |                     +--> Driving License API (Feign)
+        |                     +--> Pricing API (Feign)
         |
         v
 [BookingTransactionService]
         |
         v
-[Database: Booking Table + CarInventory Table]
+[Booking + CarInventory Tables]
 ```
 
 ---
 
-# 5. Business Rules
+# 6. Business Rules
 
-## Reservation Rules
+### Reservation Rules
 
-- Reservation cannot exceed 30 days
-- Date format must be: yyyy-MM-dd
+- Maximum reservation is **30 days**
+- All dates follow the format **yyyy-MM-dd**
 
-## License Validation
+### License Rules
 
-- Must be valid (not expired)
-- Must be issued at least 1 year ago
-- API assumed to return issueDate
+- License must be valid and not expired
+- License must be at least **1 year old**
+- The external API is assumed to return `issueDate`
 
-## Pricing
+### Pricing Rules
 
-- Retrieved from external Pricing API based on car segment.
+- Pricing is based on car segment and retrieved externally
+
+### Inventory Rules
+
+- Inventory row is locked using SQL `FOR UPDATE`
+- Overlapping reservations are verified
+- A booking is allowed only if cars are still available
 
 ---
 
-# 6. Resilience & Fault Tolerance
+# 7. Resilience
 
-Resilience4j decorators used around async Feign calls:
+Resilience4j is used in a simple and effective way:
 
 - Circuit Breaker
 - Retry
 - Timeout
 - Fallback
 
-Custom exceptions:
-
-- InvalidBookingException
-- BookingNotFoundException
-- ExternalApiRequestException
-- ExternalApiUnavailableException
-
-Global exception handler returns structured JSON.
+Custom exceptions are grouped meaningfully, and a global exception handler ensures consistent error responses.
 
 ---
 
-# 7. Security
+# 8. Security
 
-- OAuth2 Resource Server (JWT validation with HS256)
-- Role-based access via @PreAuthorize
-- HTTPS enabled via Jetty (PKCS12 Keystore)
+- OAuth2 Resource Server with HS256 JWT
+- Role-based access
+- HTTPS enabled on Jetty (port 8443)
 
 ---
 
-# 8. Spring Profiles
+# 9. Spring Profiles
 
-## mock Profile
+### mock
 
-- Connects to mock stub URLs and mock clients
-- No real external dependencies
+- Uses mock URLs & clients for external APIs
+- Ideal for development without external dependencies
 
-## prod Profile
+### prod
 
-- Connects to real Driving License API & Pricing API
-- Includes Actuator probes
+- Uses real external API endpoints
+- Suitable for production or integration testing
 
-### Run with profiles:
+### Running with profiles
 
 Mock:
-
 ```
 java -jar booking-service.jar --spring.profiles.active=mock
 ```
 
 Prod:
-
 ```
 java -jar booking-service.jar --spring.profiles.active=prod
 ```
 
 ---
 
-# 9. Project Structure
+# 10. Project Structure
 
 ```
 .
@@ -161,7 +188,7 @@ java -jar booking-service.jar --spring.profiles.active=prod
 ├── mvnw
 ├── mvnw.cmd
 ├── .mvn/
-│   └── wrapper
+│   └── wrapper/
 │       ├── maven-wrapper.jar
 │       └── maven-wrapper.properties
 └── src
@@ -186,7 +213,7 @@ java -jar booking-service.jar --spring.profiles.active=prod
     │       ├── application-mock.yml
     │       ├── application-prod.yml
     │       ├── keystore/
-    │       └── db
+    │       └── db/
     │           ├── schema.sql
     │           └── data.sql
     └── test
@@ -194,14 +221,13 @@ java -jar booking-service.jar --spring.profiles.active=prod
 
 ---
 
-# 10. API Examples
+# 11. API Examples
 
-## Confirm Booking
+### 11.1 Confirm Booking
 
-POST /api/v1/booking/confirm
+**POST** `/api/v1/booking/confirm`
 
 Request:
-
 ```
 {
   "drivingLicenseNumber": "DL12345",
@@ -213,19 +239,17 @@ Request:
 ```
 
 Response:
-
 ```
 { "bookingId": 101 }
 ```
 
 ---
 
-## Get Booking Details
+### 11.2 Get Booking Details
 
-GET /api/v1/booking/details/{id}
+**GET** `/api/v1/booking/details/{bookingId}`
 
 Response:
-
 ```
 {
   "drivingLicenseNumber": "DL12345",
@@ -240,27 +264,59 @@ Response:
 
 ---
 
-# 11. Deployment Files
+# 12. Kubernetes Deployment
 
-## Dockerfile
+A simple Kubernetes deployment file is included.  
+It contains:
 
-Contained at repo root.
+- One **Deployment**  (which can be scaled through replicas)
+- One **NodePort Service**
 
-## booking-deployment.yaml
+### booking-deployment.yaml
 
-Kubernetes deployment:
-
-- Deployment
-- Service
-- NodePort/ClusterIP
-- Probes
-- TLS
+```
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: booking-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: booking-service
+  template:
+    metadata:
+      labels:
+        app: booking-service
+    spec:
+      containers:
+        - name: booking-service
+          image: booking-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8443
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: mock
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: booking-service
+spec:
+  selector:
+    app: booking-service
+  ports:
+    - port: 8443
+      targetPort: 8443
+  type: NodePort
+```
 
 ---
 
-# 12. Summary
+# 13. Summary
 
-This is a production-ready microservice featuring async flows, resiliency, secure HTTPS communication, JWT-based
-security, transactional inventory checks, and multiple execution profiles (mock/prod) and API versioning. Suitable for
-enterprise deployment and cloud orchestration.
+This service aims to be simple, clear, and dependable.  
+It follows good development practices, keeps the design understandable, and supports future improvements through
+versioning and modular structure.
 
