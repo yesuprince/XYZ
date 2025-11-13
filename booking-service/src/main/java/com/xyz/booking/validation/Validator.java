@@ -145,7 +145,7 @@ public class Validator {
                 return response;
 
             } catch (FeignException fe) {
-                throw fe; // NEVER RETRY
+                throw fe;
             } catch (Exception e) {
                 throw new ExternalApiRequestException("API failed: " + e.getMessage(), e);
             }

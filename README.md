@@ -314,7 +314,23 @@ spec:
 
 ---
 
-# 13. Summary
+# 13. Note on JWT Token Utility Classes
+
+To support local development and manual testing, the project includes two classes:
+
+- **JwtUtil**
+- **JwtTokenGenerator**
+
+These classes are intended only for local usage to help generate simple JWT tokens.
+
+In production environments:
+
+- These utilities should **not** be used
+- JWTs must be issued by an **enterprise-grade Identity Provider**
+
+---
+
+# 14. Summary
 
 This service aims to be simple, clear, and dependable.  
 It follows good development practices, keeps the design understandable, and supports future improvements through

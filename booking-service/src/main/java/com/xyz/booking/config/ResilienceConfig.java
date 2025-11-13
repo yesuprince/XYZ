@@ -2,6 +2,7 @@ package com.xyz.booking.config;
 
 import com.xyz.booking.exception.ExternalApiRequestException;
 import com.xyz.booking.exception.InvalidBookingException;
+import feign.FeignException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.retry.Retry;
@@ -23,7 +24,8 @@ public class ResilienceConfig {
                 .waitDuration(Duration.ofMillis(300))
                 .ignoreExceptions(
                         InvalidBookingException.class,
-                        ExternalApiRequestException.class
+                        ExternalApiRequestException.class,
+                        FeignException.class
                 )
                 .build();
         return Retry.of("externalApiRetry", config);
