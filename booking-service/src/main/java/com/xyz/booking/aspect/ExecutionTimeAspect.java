@@ -22,7 +22,6 @@ public class ExecutionTimeAspect {
         try {
             result = pjp.proceed();
         } catch (Throwable ex) {
-            // Only log — DO NOT swallow or modify exception
             long end = System.currentTimeMillis();
             log.error("[{}] failed in {} ms with exception: {}",
                     pjp.getSignature().toShortString(),
