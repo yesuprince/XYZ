@@ -16,6 +16,10 @@ target/
 # Mobile Tools for Java (J2ME)
 .mtj.tmp/
 
+# macOS system files
+.DS_Store
+**/.DS_Store
+
 # Package Files #
 *.jar
 *.war
