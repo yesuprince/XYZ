@@ -52,10 +52,11 @@ resilience4j:
       externalApiRetry:
         max-attempts: 3
         wait-duration: 300ms
-  timelimiter:
-    instances:
-      externalApiTimeLimiter:
-        timeout-duration: 2s
+        ignore-exceptions:
+          - com.xyz.booking.exception.InvalidBookingException
+          - com.xyz.booking.exception.ExternalApiRequestException
+          - feign.FeignException
+
   circuitbreaker:
     instances:
       externalApiCircuit:
@@ -68,7 +69,6 @@ resilience4j:
         failure-rate-threshold: 50
         slow-call-rate-threshold: 50
         slow-call-duration-threshold: 2s
-
 logging:
   level:
     root: INFO

@@ -9,8 +9,10 @@ import com.xyz.booking.exception.InvalidBookingException;
 import com.xyz.booking.properties.ValidationProperties;
 import feign.FeignException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
-import io.github.resilience4j.decorators.Decorators;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryRegistry;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,14 +30,23 @@ import java.util.function.Supplier;
 @Slf4j
 @RequiredArgsConstructor
 public class Validator {
-    private final Retry retry;
+    private final RetryRegistry retryRegistry;
+    private final CircuitBreakerRegistry circuitBreakerRegistry;
     private final ScheduledExecutorService retryScheduler;
-    private final CircuitBreaker circuitBreaker;
     private final LicenseClient licenseClient;
     private final PricingClient pricingClient;
     private final ValidationProperties properties;
+
     @Value("${external.apis.timeout}")
     private long externalApiTimeout;
+    private Retry externalApiRetry;
+    private CircuitBreaker externalApiCircuit;
+
+    @PostConstruct
+    public void init() {
+        this.externalApiRetry = retryRegistry.retry("externalApiRetry");
+        this.externalApiCircuit = circuitBreakerRegistry.circuitBreaker("externalApiCircuit");
+    }
 
     public CompletableFuture<Void> validateReservationDuration(BookingRequest bookingRequest) {
         return CompletableFuture.runAsync(() -> {
@@ -119,18 +130,26 @@ public class Validator {
             Supplier<CompletableFuture<T>> supplier,
             Supplier<String> unavailableMessage,
             Supplier<String> contextMessage,
-            Class<T> responseClass
-    ) {
+            Class<T> responseClass) {
 
-        Supplier<CompletionStage<T>> decorated =
-                Decorators.ofCompletionStage(supplier::get)
-                        .withCircuitBreaker(circuitBreaker)
-                        .withRetry(retry, retryScheduler)
-                        .withFallback(throwable -> handleFallback(throwable, unavailableMessage, contextMessage))
-                        .decorate();
+        // Decorate supplier with Retry (async)
+        Supplier<CompletionStage<T>> retryStage =
+                Retry.decorateCompletionStage(
+                        externalApiRetry,
+                        retryScheduler,
+                        supplier::get
+                );
 
-        return decorated.get()
+        // Wrap retryStage with CircuitBreaker
+        CompletionStage<T> circuitBreakerStage =
+                externalApiCircuit.executeCompletionStage(retryStage);
+
+        // Convert to CompletableFuture + fallback + Timeout
+        return circuitBreakerStage
                 .toCompletableFuture()
+                .exceptionally(ex ->
+                        handleFallback(ex, unavailableMessage, contextMessage)
+                )
                 .orTimeout(externalApiTimeout, TimeUnit.SECONDS);
     }
 
